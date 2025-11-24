@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GTA VI: Low Budget Edition</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #222;
+            font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif; /* Bootleg font choice */
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        #gameCanvas {
+            display: block;
+        }
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .hud-top {
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            color: white;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 24px;
+        }
+        .wanted-stars {
+            color: gold;
+        }
+        
+        /* Mobile Controls Container */
+        #mobile-controls {
+            display: none; /* Shown via JS on touch devices */
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Let clicks pass through empty areas */
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 50;
+        }
+
+        /* Joystick Zone (Bottom Left) */
+        #joystick-zone {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            pointer-events: auto; /* Catch touches here */
+        }
+
+        #joystick-base {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 120px;
+            height: 120px;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.1);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+        }
+
+        #joystick-stick {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            transition: transform 0.1s; /* Smooth reset */
+        }
+
+        /* Action Buttons (Bottom Right) */
+        #action-zone {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+            pointer-events: auto;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 3px solid rgba(255, 255, 255, 0.6);
+            border-radius: 50%;
+            width: 70px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .control-btn:active {
+            background: rgba(255, 255, 255, 0.5);
+            transform: scale(0.95);
+        }
+        
+        #btn-shoot { background: rgba(255, 50, 50, 0.3); border-color: rgba(255, 100, 100, 0.6); }
+        #btn-action { background: rgba(50, 255, 50, 0.3); border-color: rgba(100, 255, 100, 0.6); width: 80px; height: 80px; font-size: 16px; }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #ff00cc, #333399);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            pointer-events: auto;
+            text-align: center;
+        }
+        h1 {
+            font-size: 60px;
+            color: white;
+            text-shadow: 4px 4px 0 #000;
+            margin-bottom: 10px;
+            transform: skew(-10deg);
+        }
+        .start-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            background: gold;
+            border: 4px solid black;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            margin-top: 20px;
+            box-shadow: 5px 5px 0 rgba(0,0,0,0.5);
+        }
+        .start-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 3px 3px 0 rgba(0,0,0,0.5);
+        }
+        #wasted-screen {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 90;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .wasted-text {
+            color: #bdc3c7;
+            font-size: 80px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            font-family: sans-serif;
+        }
+        /* Mobile layout */
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: block;
+            }
+            h1 { font-size: 40px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div id="cash">$0</div>
+            <div id="stars" class="wanted-stars"></div>
+        </div>
+        
+        <div id="mobile-controls">
+            <!-- Joystick Zone -->
+            <div id="joystick-zone">
+                <div id="joystick-base"></div>
+                <div id="joystick-stick"></div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div id="action-zone">
+                <div class="control-btn" id="btn-shoot">FIRE</div>
+                <div class="control-btn" id="btn-action">JACK</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>GRAND THEFT AUTO<br><span style="color: gold; font-size: 80px;">VI</span></h1>
+        <h2 style="color: white; margin-top: -10px;">(Bootleg Edition)</h2>
+        <p style="color: #eee;">WASD/Joystick to Move • SPACE/Btn to Shoot • F/Btn to Steal Cars</p>
+        <button class="start-btn" onclick="startGame()">PLAY GAME</button>
+    </div>
+
+    <div id="wasted-screen">
+        <div class="wasted-text">WASTED</div>
+        <div id="final-score" style="color: gold; font-size: 40px; margin-bottom: 20px; font-family: inherit; text-shadow: 2px 2px 0 #000;">Score: $0</div>
+        <button class="start-btn" onclick="resetGame()">TRY AGAIN</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiCash = document.getElementById('cash');
+        const uiStars = document.getElementById('stars');
+        const startScreen = document.getElementById('start-screen');
+        const wastedScreen = document.getElementById('wasted-screen');
+        const finalScoreEl = document.getElementById('final-score');
+
+        // Game State
+        let gameState = 'MENU'; // MENU, PLAYING, WASTED
+        let keys = {};
+        let touchControls = { up: false, down: false, left: false, right: false, action: false, shoot: false };
+
+        // Resize Canvas
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Input Handling
+        window.addEventListener('keydown', e => { 
+            keys[e.key.toLowerCase()] = true; 
+            if(e.key === 'ArrowUp') keys['w']=true; 
+            if(e.key === 'ArrowDown') keys['s']=true; 
+            if(e.key === 'ArrowLeft') keys['a']=true; 
+            if(e.key === 'ArrowRight') keys['d']=true;
+            if(e.code === 'Space') keys['space'] = true;
+        });
+        window.addEventListener('keyup', e => { 
+            keys[e.key.toLowerCase()] = false; 
+            if(e.key === 'ArrowUp') keys['w']=false; 
+            if(e.key === 'ArrowDown') keys['s']=false; 
+            if(e.key === 'ArrowLeft') keys['a']=false; 
+            if(e.key === 'ArrowRight') keys['d']=false;
+            if(e.code === 'Space') keys['space'] = false;
+            
+            if (e.key.toLowerCase() === 'f') handleAction();
+        });
+
+        // --- JOYSTICK LOGIC ---
+        const joystickZone = document.getElementById('joystick-zone');
+        const joystickStick = document.getElementById('joystick-stick');
+        let joyStartX = 0;
+        let joyStartY = 0;
+        let joyActive = false;
+
+        joystickZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            const rect = joystickZone.getBoundingClientRect();
+            // Center of the joystick zone
+            joyStartX = rect.left + rect.width / 2;
+            joyStartY = rect.top + rect.height / 2;
+            joyActive = true;
+            updateJoystick(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        joystickZone.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (joyActive) {
+                const touch = e.changedTouches[0];
+                updateJoystick(touch.clientX, touch.clientY);
+            }
+        }, { passive: false });
+
+        const endJoystick = (e) => {
+            e.preventDefault();
+            joyActive = false;
+            // Reset visuals
+            joystickStick.style.transform = `translate(-50%, -50%)`;
+            joystickStick.style.transition = 'transform 0.1s';
+            // Reset inputs
+            touchControls.up = false;
+            touchControls.down = false;
+            touchControls.left = false;
+            touchControls.right = false;
+        };
+
+        joystickZone.addEventListener('touchend', endJoystick);
+        joystickZone.addEventListener('touchcancel', endJoystick);
+
+        function updateJoystick(x, y) {
+            joystickStick.style.transition = 'none';
+            
+            // Calculate delta
+            let dx = x - joyStartX;
+            let dy = y - joyStartY;
+            const distance = Math.hypot(dx, dy);
+            const maxRadius = 40; // Max stick movement
+
+            // Clamp distance
+            if (distance > maxRadius) {
+                const angle = Math.atan2(dy, dx);
+                dx = Math.cos(angle) * maxRadius;
+                dy = Math.sin(angle) * maxRadius;
+            }
+
+            // Move stick visually
+            joystickStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+            // Map to Inputs (Simple threshold logic)
+            // Deadzone of 10px
+            touchControls.right = dx > 15;
+            touchControls.left = dx < -15;
+            touchControls.down = dy > 15;
+            touchControls.up = dy < -15;
+        }
+
+        // --- BUTTON LOGIC ---
+        const setupBtn = (id, key) => {
+            const el = document.getElementById(id);
+            el.addEventListener('touchstart', (e) => { e.preventDefault(); touchControls[key] = true; if(key === 'action') handleAction(); });
+            el.addEventListener('touchend', (e) => { e.preventDefault(); touchControls[key] = false; });
+        };
+        setupBtn('btn-action', 'action');
+        setupBtn('btn-shoot', 'shoot');
+
+
+        // Game Objects
+        const player = {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 20,
+            speed: 3, 
+            angle: 0,
+            inCar: null,
+            cash: 0,
+            health: 1, 
+            wanted: 0,
+            lastShot: 0
+        };
+
+        const camera = { x: 0, y: 0 };
+        const worldSize = 4000; // Virtual world size
+        const cars = [];
+        const buildings = [];
+        const pedestrians = [];
+        const cops = [];
+        const helicopters = []; 
+        const particles = [];
+        const bullets = [];
+
+        // Constants
+        const BUILDING_SIZE = 100;
+        const STREET_WIDTH = 180; 
+
+        function initGame() {
+            // Generate World
+            buildings.length = 0;
+            cars.length = 0;
+            pedestrians.length = 0;
+            cops.length = 0;
+            helicopters.length = 0;
+            bullets.length = 0;
+
+            // Simple Grid City
+            for (let x = -worldSize/2; x < worldSize/2; x += BUILDING_SIZE + STREET_WIDTH) {
+                for (let y = -worldSize/2; y < worldSize/2; y += BUILDING_SIZE + STREET_WIDTH) {
+                    buildings.push({
+                        x: x + STREET_WIDTH/2,
+                        y: y + STREET_WIDTH/2,
+                        w: BUILDING_SIZE,
+                        h: BUILDING_SIZE,
+                        color: `hsl(${Math.random() * 360}, 50%, 40%)`
+                    });
+                }
+            }
+
+            // Spawn Cars (Increased to 60)
+            for (let i = 0; i < 60; i++) {
+                spawnCar();
+            }
+
+            // Spawn Peds
+            for (let i = 0; i < 30; i++) {
+                spawnPed();
+            }
+
+            player.x = 0;
+            player.y = 0;
+            player.inCar = null;
+            player.wanted = 0;
+            player.health = 100;
+            player.cash = 0;
+            
+            // Safe Spawn Logic: Ensure player is not inside a building
+            findSafeSpawn();
+            
+            updateHUD();
+        }
+
+        function findSafeSpawn() {
+            let safe = false;
+            let attempts = 0;
+            while(!safe && attempts < 100) {
+                // Check collision at current spot
+                let collision = false;
+                for (let b of buildings) {
+                    if (Math.abs(player.x - b.x) > 200 || Math.abs(player.y - b.y) > 200) continue;
+                    if (player.x > b.x - b.w/2 - player.width/2 &&
+                        player.x < b.x + b.w/2 + player.width/2 &&
+                        player.y > b.y - b.h/2 - player.height/2 &&
+                        player.y < b.y + b.h/2 + player.height/2) {
+                        collision = true;
+                        break;
+                    }
+                }
+                
+                if (collision) {
+                    player.x += 50; 
+                    if(player.x > worldSize/2) {
+                         player.x = -worldSize/2;
+                         player.y += 50;
+                    }
+                } else {
+                    safe = true;
+                }
+                attempts++;
+            }
+        }
+
+        function spawnCar() {
+            const isHorizontal = Math.random() > 0.5;
+            cars.push({
+                x: (Math.random() - 0.5) * worldSize,
+                y: (Math.random() - 0.5) * worldSize,
+                w: 40,
+                h: 20,
+                angle: isHorizontal ? 0 : Math.PI/2,
+                speed: 0,
+                maxSpeed: (8 + Math.random() * 5) * 1.2,
+                color: ['red', 'blue', 'lime', 'yellow', 'purple', 'white'][Math.floor(Math.random()*6)],
+                state: 'parked', 
+                driver: null
+            });
+        }
+
+        function spawnPed() {
+             pedestrians.push({
+                x: (Math.random() - 0.5) * worldSize,
+                y: (Math.random() - 0.5) * worldSize,
+                speed: 1 + Math.random(),
+                angle: Math.random() * Math.PI * 2,
+                color: 'peachpuff',
+                state: 'walking'
+             });
+        }
+
+        function spawnCop() {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 600;
+            
+            cops.push({
+                x: player.x + Math.cos(angle) * dist,
+                y: player.y + Math.sin(angle) * dist,
+                w: 40,
+                h: 20,
+                angle: 0,
+                speed: 0,
+                maxSpeed: 5, 
+                color: 'black',
+                isCop: true,
+                hp: 3 // Cops have HP now
+            });
+        }
+
+        function spawnHelicopter() {
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 800;
+            helicopters.push({
+                x: player.x + Math.cos(angle) * dist,
+                y: player.y + Math.sin(angle) * dist,
+                angle: 0,
+                speed: 2.8,
+                rotorAngle: 0
+            });
+        }
+
+        function spawnBullet(x, y, angle) {
+            bullets.push({
+                x: x + Math.cos(angle) * 30,
+                y: y + Math.sin(angle) * 30,
+                vx: Math.cos(angle) * 20,
+                vy: Math.sin(angle) * 20,
+                life: 60
+            });
+        }
+
+        function handleAction() {
+            if (gameState !== 'PLAYING') return;
+
+            if (player.inCar) {
+                // Exit Car
+                player.x = player.inCar.x + Math.cos(player.inCar.angle) * 30;
+                player.y = player.inCar.y + Math.sin(player.inCar.angle) * 30;
+                player.inCar.driver = null;
+                player.inCar.state = 'parked';
+                player.inCar.speed = 0; // Handbrake
+                player.inCar = null;
+            } else {
+                // Enter Car (Jack)
+                let closestCar = null;
+                let minDist = 60;
+
+                for (let car of cars) {
+                    const d = Math.hypot(car.x - player.x, car.y - player.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestCar = car;
+                    }
+                }
+                // Check cops too
+                for (let car of cops) {
+                    const d = Math.hypot(car.x - player.x, car.y - player.y);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestCar = car;
+                        player.wanted = Math.min(player.wanted + 2, 5); // Stealing cop car still serious
+                    }
+                }
+
+                if (closestCar) {
+                    player.inCar = closestCar;
+                    player.inCar.driver = player;
+                    player.x = closestCar.x;
+                    player.y = closestCar.y;
+                    
+                    // Bootleg effect: Stealing gives cash
+                    player.cash += 50;
+                    
+                    // NEW: Only increase star if you are clean (0 stars)
+                    if (player.wanted === 0) {
+                        player.wanted = 1;
+                    }
+                    
+                    createFloatingText("Car Jacked +$50!", player.x, player.y - 30);
+                    updateHUD();
+                }
+            }
+        }
+
+        function startGame() {
+            gameState = 'PLAYING';
+            startScreen.style.display = 'none';
+            initGame();
+            gameLoop();
+        }
+        
+        function showWasted() {
+            gameState = 'WASTED';
+            wastedScreen.style.display = 'flex';
+            finalScoreEl.textContent = "FINAL SCORE: $" + player.cash;
+        }
+
+        function resetGame() {
+            wastedScreen.style.display = 'none';
+            startGame();
+        }
+
+        function updateHUD() {
+            uiCash.textContent = `$${player.cash}`;
+            let starStr = '';
+            for(let i=0; i<Math.floor(player.wanted); i++) starStr += '★';
+            uiStars.textContent = starStr;
+        }
+
+        function createFloatingText(text, x, y) {
+            particles.push({
+                x, y, text, life: 60, type: 'text'
+            });
+        }
+
+        function createExplosion(x, y) {
+            for(let i=0; i<10; i++) {
+                particles.push({
+                    x, y, 
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 30,
+                    color: ['orange', 'red', 'yellow'][Math.floor(Math.random()*3)],
+                    size: Math.random() * 10 + 5,
+                    type: 'particle'
+                });
+            }
+        }
+
+        function update() {
+            if (gameState !== 'PLAYING') return;
+
+            // Input Logic
+            let moveUp = keys['w'] || touchControls.up;
+            let moveDown = keys['s'] || touchControls.down;
+            let moveLeft = keys['a'] || touchControls.left;
+            let moveRight = keys['d'] || touchControls.right;
+            let shooting = keys['space'] || touchControls.shoot;
+
+            // SHOOTING LOGIC
+            if (shooting && Date.now() - player.lastShot > 200) {
+                player.lastShot = Date.now();
+                if (player.inCar) {
+                    spawnBullet(player.x, player.y, player.inCar.angle);
+                } else {
+                    spawnBullet(player.x, player.y, player.angle);
+                }
+            }
+
+            if (player.inCar) {
+                // Car Physics
+                const car = player.inCar;
+                
+                if (moveUp) car.speed += 0.24;
+                if (moveDown) car.speed -= 0.24;
+                
+                car.speed *= 0.96;
+
+                if (Math.abs(car.speed) > 0.5) {
+                    const turnSpeed = 0.05;
+                    if (moveLeft) car.angle -= turnSpeed * Math.sign(car.speed);
+                    if (moveRight) car.angle += turnSpeed * Math.sign(car.speed);
+                }
+
+                car.x += Math.cos(car.angle) * car.speed;
+                car.y += Math.sin(car.angle) * car.speed;
+                player.x = car.x;
+                player.y = car.y;
+
+                checkBuildingCollision(car);
+
+            } else {
+                // Foot Physics
+                let currentSpeed = player.speed;
+                let vx = 0;
+                let vy = 0;
+                if (moveUp) vy = -currentSpeed;
+                if (moveDown) vy = currentSpeed;
+                if (moveLeft) vx = -currentSpeed;
+                if (moveRight) vx = currentSpeed;
+
+                player.x += vx;
+                player.y += vy;
+                
+                if (vx !== 0 || vy !== 0) player.angle = Math.atan2(vy, vx);
+
+                checkBuildingCollision(player);
+            }
+
+            // Update Bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life--;
+                
+                if (b.life <= 0) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+
+                // Bullet Collision vs Civ Cars
+                let hit = false;
+                for (let j = cars.length - 1; j >= 0; j--) {
+                    const c = cars[j];
+                    if (c === player.inCar) continue;
+                    const d = Math.hypot(c.x - b.x, c.y - b.y);
+                    if (d < 30) {
+                        createExplosion(c.x, c.y);
+                        cars.splice(j, 1); // Destroy car
+                        hit = true;
+                        player.wanted = Math.min(player.wanted + 1, 5); // Add Star
+                        updateHUD();
+                        break;
+                    }
+                }
+                if (hit) { bullets.splice(i, 1); continue; }
+
+                // Bullet Collision vs Cops
+                for (let j = cops.length - 1; j >= 0; j--) {
+                    const c = cops[j];
+                    if (c === player.inCar) continue;
+                    const d = Math.hypot(c.x - b.x, c.y - b.y);
+                    if (d < 30) {
+                        c.hp--;
+                        createExplosion(c.x, c.y); // visual feedback
+                        if (c.hp <= 0) {
+                            cops.splice(j, 1); // Destroy Cop
+                            player.cash += 100;
+                            createFloatingText("COP DESTROYED +$100", c.x, c.y);
+                            updateHUD();
+                        }
+                        hit = true;
+                        player.wanted = Math.min(player.wanted + 1, 5); // Add Star
+                        updateHUD();
+                        break;
+                    }
+                }
+                if (hit) { bullets.splice(i, 1); continue; }
+
+                // Bullet Collision vs Peds
+                for (let j = pedestrians.length - 1; j >= 0; j--) {
+                    const p = pedestrians[j];
+                    const d = Math.hypot(p.x - b.x, p.y - b.y);
+                    if (d < 15) {
+                        createExplosion(p.x, p.y);
+                        pedestrians.splice(j, 1);
+                        hit = true;
+                        player.wanted = Math.min(player.wanted + 1, 5);
+                        
+                        // KILL REWARD
+                        player.cash += 50;
+                        createFloatingText("+$50", p.x, p.y);
+                        updateHUD();
+                        
+                        spawnPed(); // Respawn elsewhere
+                        break;
+                    }
+                }
+                if (hit) { bullets.splice(i, 1); continue; }
+            }
+
+            // Update Cops
+            if (player.wanted > 0 && cops.length < player.wanted * 2) {
+                if (Math.random() < 0.01) spawnCop();
+            }
+
+            // Spawn Helicopter at 4+ stars
+            if (player.wanted >= 4 && helicopters.length < 1) {
+                spawnHelicopter();
+            }
+
+            const speedMult = 0.5 + (Math.floor(player.wanted) * 0.2);
+            const baseCopSpeed = 6; 
+
+            // Update Cop Cars
+            for (let i = cops.length - 1; i >= 0; i--) {
+                const cop = cops[i];
+                if (cop === player.inCar) continue; 
+
+                // AI
+                const dx = player.x - cop.x;
+                const dy = player.y - cop.y;
+                const dist = Math.hypot(dx, dy);
+                const targetAngle = Math.atan2(dy, dx);
+
+                let diff = targetAngle - cop.angle;
+                while (diff < -Math.PI) diff += Math.PI * 2;
+                while (diff > Math.PI) diff -= Math.PI * 2;
+                cop.angle += diff * 0.05;
+
+                cop.speed += 0.1;
+                let currentMax = baseCopSpeed * speedMult;
+                if (cop.speed > currentMax) cop.speed = currentMax;
+
+                cop.x += Math.cos(cop.angle) * cop.speed;
+                cop.y += Math.sin(cop.angle) * cop.speed;
+
+                // Collision with player
+                if (dist < 40) {
+                    if (!player.inCar) {
+                        createFloatingText("BUSTED!", player.x, player.y);
+                        showWasted();
+                    } else {
+                        // RAMMING LOGIC
+                        createExplosion((player.x + cop.x)/2, (player.y + cop.y)/2);
+                        createFloatingText("CRASH! -$100", player.x, player.y - 50);
+                        player.cash -= 100;
+                        updateHUD();
+                        
+                        cops.splice(i, 1);
+                        const pCarIdx = cars.indexOf(player.inCar);
+                        if(pCarIdx > -1) cars.splice(pCarIdx, 1);
+                        player.inCar = null;
+                        player.x += (Math.random()-0.5)*40;
+                        player.y += (Math.random()-0.5)*40;
+                        continue; 
+                    }
+                }
+                checkBuildingCollision(cop);
+            }
+
+            // Update Helicopters
+            for (let i = helicopters.length - 1; i >= 0; i--) {
+                const heli = helicopters[i];
+                const dx = player.x - heli.x;
+                const dy = player.y - heli.y;
+                const dist = Math.hypot(dx, dy);
+                
+                heli.angle = Math.atan2(dy, dx);
+                heli.x += Math.cos(heli.angle) * heli.speed;
+                heli.y += Math.sin(heli.angle) * heli.speed;
+                heli.rotorAngle += 0.5;
+
+                if (dist < 40) {
+                     if (player.inCar) {
+                        createExplosion((player.x + heli.x)/2, (player.y + heli.y)/2);
+                        createFloatingText("CHOPPER CRASH! -$100", player.x, player.y - 50);
+                        player.cash -= 100;
+                        updateHUD();
+
+                        helicopters.splice(i, 1);
+                        const pCarIdx = cars.indexOf(player.inCar);
+                        if(pCarIdx > -1) cars.splice(pCarIdx, 1);
+                        player.inCar = null;
+                        player.x += (Math.random()-0.5)*40;
+                        player.y += (Math.random()-0.5)*40;
+                        continue; 
+                    } else {
+                        createFloatingText("BUSTED!", player.x, player.y);
+                        showWasted();
+                    }
+                }
+
+                if (dist < 150 && Math.random() < 0.1) {
+                    createExplosion(player.x, player.y); 
+                }
+            };
+
+            // Update Pedestrians
+            pedestrians.forEach(ped => {
+                ped.x += Math.cos(ped.angle) * ped.speed;
+                ped.y += Math.sin(ped.angle) * ped.speed;
+                if(Math.random() < 0.02) ped.angle += (Math.random() - 0.5);
+
+                const d = Math.hypot(player.x - ped.x, player.y - ped.y);
+                if (d < 100 && (Math.abs(player.inCar?.speed) > 5 || player.wanted > 0)) {
+                    ped.speed = 3;
+                    ped.angle = Math.atan2(ped.y - player.y, ped.x - player.x);
+                } else {
+                    ped.speed = 1;
+                }
+                
+                if (player.inCar && d < 30 && Math.abs(player.inCar.speed) > 2) {
+                    ped.x = (Math.random()-0.5)*worldSize; 
+                    ped.y = (Math.random()-0.5)*worldSize;
+                    player.wanted = Math.min(player.wanted + 1, 5);
+                    player.cash += 50; 
+                    createFloatingText("+$50", player.x, player.y);
+                    createExplosion(player.x, player.y);
+                    updateHUD();
+                }
+            });
+
+            // Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life--;
+                if (p.type === 'particle') {
+                    p.x += p.vx;
+                    p.y += p.vy;
+                } else {
+                    p.y -= 1; // Text floats up
+                }
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            // Camera follow
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+        }
+
+        function checkBuildingCollision(entity) {
+            const size = entity.w || 20;
+            const isCar = entity.maxSpeed !== undefined; 
+            
+            for (let b of buildings) {
+                if (Math.abs(entity.x - b.x) > 200 || Math.abs(entity.y - b.y) > 200) continue;
+
+                if (entity.x > b.x - b.w/2 - size/2 &&
+                    entity.x < b.x + b.w/2 + size/2 &&
+                    entity.y > b.y - b.h/2 - size/2 &&
+                    entity.y < b.y + b.h/2 + size/2) {
+                    
+                    if(isCar) {
+                         entity.speed *= -0.5; 
+                    }
+                    
+                    let overlapLeft = (entity.x + size/2) - (b.x - b.w/2);
+                    let overlapRight = (b.x + b.w/2) - (entity.x - size/2);
+                    let overlapTop = (entity.y + size/2) - (b.y - b.h/2);
+                    let overlapBottom = (b.y + b.h/2) - (entity.y - size/2);
+
+                    let minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+                    if (minOverlap === overlapLeft) entity.x -= overlapLeft;
+                    else if (minOverlap === overlapRight) entity.x += overlapRight;
+                    else if (minOverlap === overlapTop) entity.y -= overlapTop;
+                    else if (minOverlap === overlapBottom) entity.y += overlapBottom;
+                }
+            }
+        }
+
+        function draw() {
+            // Background (Grass)
+            ctx.fillStyle = '#2d6a4f';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // Draw Grid (Roads)
+            ctx.fillStyle = '#555';
+            
+            // Draw Buildings
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+            
+            for (let b of buildings) {
+                if (b.x < camera.x - 200 || b.x > camera.x + canvas.width + 200 ||
+                    b.y < camera.y - 200 || b.y > camera.y + canvas.height + 200) continue;
+
+                ctx.fillStyle = b.color;
+                ctx.fillRect(b.x - b.w/2, b.y - b.h/2, b.w, b.h);
+                ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                ctx.fillRect(b.x - b.w/2 + 5, b.y - b.h/2 + 5, b.w - 10, b.h - 10);
+            }
+            ctx.shadowBlur = 0;
+
+            // Draw Pedestrians
+            for (let p of pedestrians) {
+                if (p.x < camera.x - 100 || p.x > camera.x + canvas.width + 100) continue;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Draw Cars
+            const drawCar = (c) => {
+                if (c.x < camera.x - 100 || c.x > camera.x + canvas.width + 100) return;
+                
+                ctx.save();
+                ctx.translate(c.x, c.y);
+                ctx.rotate(c.angle);
+                
+                // Body
+                ctx.fillStyle = c.color;
+                if (c.isCop) {
+                    ctx.fillStyle = (Date.now() % 200 < 100) ? 'blue' : 'red';
+                }
+                ctx.fillRect(-c.w/2, -c.h/2, c.w, c.h);
+
+                // Windshield
+                ctx.fillStyle = '#add8e6';
+                ctx.fillRect(0, -c.h/2 + 2, c.w/2 - 2, c.h - 4);
+                
+                // Roof
+                if (!c.isCop) {
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.fillRect(-c.w/4, -c.h/2 + 2, c.w/2, c.h - 4);
+                }
+
+                ctx.restore();
+            };
+
+            // Draw other cars
+            cars.forEach(drawCar);
+            cops.forEach(drawCar);
+
+            // Draw Player (if not in car)
+            if (!player.inCar) {
+                ctx.save();
+                ctx.translate(player.x, player.y);
+                ctx.rotate(player.angle);
+                
+                // Body
+                ctx.fillStyle = '#f1c40f'; // Yellow shirt
+                ctx.beginPath();
+                ctx.arc(0, 0, 10, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Head
+                ctx.fillStyle = '#ffccaa';
+                ctx.beginPath();
+                ctx.arc(0, 0, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Gun (Black rectangle)
+                ctx.fillStyle = 'black';
+                ctx.fillRect(5, 2, 8, 4);
+
+                ctx.restore();
+            } else {
+                drawCar(player.inCar);
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.moveTo(player.x, player.y - 30);
+                ctx.lineTo(player.x - 10, player.y - 50);
+                ctx.lineTo(player.x + 10, player.y - 50);
+                ctx.fill();
+            }
+
+            // Draw Helicopters
+            helicopters.forEach(h => {
+                ctx.save();
+                ctx.translate(h.x, h.y);
+                ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                ctx.beginPath();
+                ctx.arc(20, 20, 15, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.rotate(h.angle);
+                ctx.fillStyle = '#333';
+                ctx.fillRect(-10, -20, 20, 40);
+                ctx.fillRect(-5, 10, 10, 30);
+
+                ctx.rotate(h.rotorAngle);
+                ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
+                ctx.fillRect(-60, -2, 120, 4);
+                ctx.fillRect(-2, -60, 4, 120);
+                ctx.restore();
+            });
+
+             // Draw Bullets
+             ctx.fillStyle = 'yellow';
+             for(let b of bullets) {
+                 ctx.fillRect(b.x - 2, b.y - 2, 4, 4);
+             }
+
+            // Draw Particles
+            particles.forEach(p => {
+                if (p.type === 'text') {
+                    ctx.fillStyle = 'white';
+                    ctx.font = '20px Comic Sans MS';
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 3;
+                    ctx.strokeText(p.text, p.x, p.y);
+                    ctx.fillText(p.text, p.x, p.y);
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            });
+
+            ctx.restore();
+        }
+
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+    </script>
+</body>
+</html>
